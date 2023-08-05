@@ -43,6 +43,7 @@ namespace TileServerGL
                 {
                 }
 
+                _FileSource.Dispose();
                 _RunLoop.Dispose();
             });
 
@@ -194,8 +195,7 @@ namespace TileServerGL
 
         public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
-            var fileSource = FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default());
-            var fileProviderPool = new FileProviderPool(0, 16, () => (new RunLoop(), fileSource));
+            var fileProviderPool = new FileProviderPool(0, 16, () => (new RunLoop(), FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default())));
             var lowerCaseNamingPolicy = new LowerCaseNamingPolicy();
             var serveBounds = new[]
             {
