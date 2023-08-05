@@ -195,7 +195,6 @@ namespace TileServerGL
 
         public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
-            var fileProviderPool = new FileProviderPool(0, 16, () => (new RunLoop(), FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default())));
             var lowerCaseNamingPolicy = new LowerCaseNamingPolicy();
             var serveBounds = new[]
             {
@@ -204,6 +203,11 @@ namespace TileServerGL
                 Math.Max(configuration.Options.ServeBounds[0], configuration.Options.ServeBounds[2]),
                 Math.Max(configuration.Options.ServeBounds[1], configuration.Options.ServeBounds[3])
             };
+
+            var fileProviderPools = configuration.Data.Keys.ToDictionary(
+                id => id,
+                id => new FileProviderPool(0, 1, () => (new RunLoop(), FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default())))
+            );
 
             endpointRouteBuilder.MapGet(@"/{id:regex(^[A-Za-z0-9_\-]+$)}/{z:int:min(0)}/{x:int:min(0)}/{y:int:min(0)}.{format:regex(^\w+$)}", async (HttpContext context, string id, int x, int y, byte z, string format) =>
             {
@@ -238,7 +242,7 @@ namespace TileServerGL
 
                 Response? response = null;
 
-                var fileProvider = fileProviderPool.Acquire();
+                var fileProvider = fileProviderPools[id].Acquire();
 
                 try
                 {
@@ -255,7 +259,7 @@ namespace TileServerGL
                 }
                 finally
                 {
-                    fileProviderPool.Release(fileProvider);
+                    fileProviderPools[id].Release(fileProvider);
                 }
 
                 if (response!.Error != null)
