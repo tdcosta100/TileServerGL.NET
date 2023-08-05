@@ -16,7 +16,7 @@ namespace TileServerGL
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -109,7 +109,7 @@ namespace TileServerGL
 
             Util.TileSize = configuration.Options!.TileSize;
 
-            Server.Init(configuration, app, app, builder.Environment);
+            await Server.Init(configuration, app, app, builder.Environment);
 
             if (builder.Configuration.GetValue<bool?>("UseOutputCache") ?? false)
             {

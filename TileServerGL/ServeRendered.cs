@@ -345,7 +345,7 @@ namespace TileServerGL
 
             endpointRouteBuilder.MapGet(
                 pattern: $@"/{{id:regex(^[A-Za-z0-9_\-]+$)}}/{{z:int:min(0)}}/{{x:int:min(0)}}/{{y:int:min(0)}}@{{scale:int:min(1):max({Math.Min(configuration.Options!.MaxScaleFactor, 9)})}}x.{{format:regex(^\w+$)}}",
-                handler: (HttpContext context, string id, int x, int y, byte z, int scale, string format) =>
+                handler: async (HttpContext context, string id, int x, int y, byte z, int scale, string format) =>
                 {
                     if (id == null || !configuration.Styles.ContainsKey(id))
                     {
@@ -372,7 +372,7 @@ namespace TileServerGL
 
                     try
                     {
-                        renderer.Invoke(elements =>
+                        await renderer.InvokeAsync(elements =>
                         {
                             Exception? ex = null;
 
@@ -506,7 +506,7 @@ namespace TileServerGL
                 endpointRouteBuilder.MapGet(
                     pattern: "/{id:regex(^[A-Za-z0-9_\\-]+$)}/static",
                     handler:
-                    (
+                    async (
                         HttpContext context,
                         string id,
                         [FromQuery(Name = "raw")] bool raw,
@@ -768,7 +768,7 @@ namespace TileServerGL
 
                             try
                             {
-                                renderer.Invoke(elements =>
+                                await renderer.InvokeAsync(elements =>
                                 {
                                     Exception? ex = null;
 
@@ -1000,7 +1000,7 @@ namespace TileServerGL
                                                 if (Util.HttpRegex.IsMatch(iconPath))
                                                 {
                                                     using var client = new HttpClient();
-                                                    markerIcon = SKBitmap.Decode(client.GetByteArrayAsync(iconPath).Result);
+                                                    markerIcon = SKBitmap.Decode(await client.GetByteArrayAsync(iconPath));
                                                 }
                                                 else
                                                 {

@@ -11,7 +11,7 @@ namespace TileServerGL
 {
     public class Server
     {
-        public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, IWebHostEnvironment webHostEnvironment)
+        public static async Task Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, IWebHostEnvironment webHostEnvironment)
         {
             var handlebars = Handlebars.Create();
 
@@ -48,7 +48,7 @@ namespace TileServerGL
                             ?
                             File.ReadAllText(Path.IsPathFullyQualified(styleEntry.Value.Style) ? styleEntry.Value.Style : Path.Combine(configuration.Options.Paths.Styles!, styleEntry.Value.Style))
                             :
-                            client.GetStringAsync(styleEntry.Value.Style).Result
+                            await client.GetStringAsync(styleEntry.Value.Style)
                         );
 
                         var tileJSON = new JsonObject()

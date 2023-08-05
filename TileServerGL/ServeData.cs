@@ -205,7 +205,7 @@ namespace TileServerGL
                 Math.Max(configuration.Options.ServeBounds[1], configuration.Options.ServeBounds[3])
             };
 
-            endpointRouteBuilder.MapGet(@"/{id:regex(^[A-Za-z0-9_\-]+$)}/{z:int:min(0)}/{x:int:min(0)}/{y:int:min(0)}.{format:regex(^\w+$)}", (HttpContext context, string id, int x, int y, byte z, string format) =>
+            endpointRouteBuilder.MapGet(@"/{id:regex(^[A-Za-z0-9_\-]+$)}/{z:int:min(0)}/{x:int:min(0)}/{y:int:min(0)}.{format:regex(^\w+$)}", async (HttpContext context, string id, int x, int y, byte z, string format) =>
             {
                 if (!configuration.Data.ContainsKey(id))
                 {
@@ -242,7 +242,7 @@ namespace TileServerGL
 
                 try
                 {
-                    fileProvider.Invoke(elements =>
+                    await fileProvider.InvokeAsync(elements =>
                     {
                         var request = elements.FileSource.Request(Resource.Tile(string.Format("mbtiles://{0}?tile={{z}}/{{x}}/{{y}}.{1}", Path.Combine(configuration.Options!.Paths!.MBTiles, data.MBTiles), tileJSONFormat), 1.0f, x, y, z, Resource.TilesetScheme.XYZ), res =>
                         {
