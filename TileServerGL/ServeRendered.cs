@@ -30,7 +30,7 @@ namespace TileServerGL
         {
             _RendererThread = new Thread(() =>
             {
-                Thread.CurrentThread.Name = $"Renderer {Thread.CurrentThread.ManagedThreadId}";
+                Thread.CurrentThread.Name = $"Renderer {Environment.CurrentManagedThreadId}";
 
                 (_RunLoop, _Frontend, _Map) = initializer();
 
