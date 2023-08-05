@@ -23,8 +23,8 @@ namespace TileServerGL
         private RunLoop? _RunLoop = null;
         private HeadlessFrontend? _Frontend = null;
         private Map? _Map = null;
-        private BlockingCollection<Action<(RunLoop RunLoop, HeadlessFrontend FrontEnd, Map Map)>> _RenderQueue = new BlockingCollection<Action<(RunLoop RunLoop, HeadlessFrontend FrontEnd, Map Map)>>();
-        private CancellationTokenSource _CancellationTokenSource = new CancellationTokenSource();
+        private BlockingCollection<Action<(RunLoop RunLoop, HeadlessFrontend FrontEnd, Map Map)>> _RenderQueue = new();
+        private CancellationTokenSource _CancellationTokenSource = new();
 
         public Renderer(Func<(RunLoop RunLoop, HeadlessFrontend FrontEnd, Map Map)> initializer)
         {
@@ -116,11 +116,11 @@ namespace TileServerGL
     public class RendererPool
     {
         #region Private fields
-        private readonly object _Lock = new object();
+        private readonly object _Lock = new();
         private readonly int _MinRenderers;
         private readonly int _MaxRenderers;
         private readonly Func<(RunLoop RunLoop, HeadlessFrontend FrontEnd, Map Map)> _RendererInitializer;
-        private readonly BlockingCollection<Renderer> _IdleRenderers = new BlockingCollection<Renderer>(new ConcurrentBag<Renderer>());
+        private readonly BlockingCollection<Renderer> _IdleRenderers = new(new ConcurrentBag<Renderer>());
         private int _TotalRenderers;
         private readonly Timer _RemoveRendererTimer;
         #endregion
@@ -308,35 +308,33 @@ namespace TileServerGL
 
             var respondImage = (string format, SKBitmap image) =>
             {
-                using (var stream = new MemoryStream())
+                using var stream = new MemoryStream();
+                var encodedFormat = SKEncodedImageFormat.Png;
+                var encoderQuality = configuration.Options.FormatQuality["png"];
+                var contentType = "image/png";
+
+                switch (format)
                 {
-                    var encodedFormat = SKEncodedImageFormat.Png;
-                    var encoderQuality = configuration.Options.FormatQuality["png"];
-                    var contentType = "image/png";
-
-                    switch (format)
-                    {
-                        case "jpg":
-                        case "jpeg":
-                            encodedFormat = SKEncodedImageFormat.Jpeg;
-                            contentType = MediaTypeNames.Image.Jpeg;
-                            encoderQuality = configuration.Options.FormatQuality["jpeg"];
-                            break;
-                        case "png":
-                            break;
-                        case "webp":
-                            encodedFormat = SKEncodedImageFormat.Webp;
-                            encoderQuality = configuration.Options.FormatQuality["webp"];
-                            contentType = "image/webp";
-                            break;
-                        default:
-                            return Results.BadRequest("Invalid format");
-                    }
-
-                    image.Encode(stream, encodedFormat, encoderQuality);
-
-                    return Results.Bytes(stream.ToArray(), contentType);
+                    case "jpg":
+                    case "jpeg":
+                        encodedFormat = SKEncodedImageFormat.Jpeg;
+                        contentType = MediaTypeNames.Image.Jpeg;
+                        encoderQuality = configuration.Options.FormatQuality["jpeg"];
+                        break;
+                    case "png":
+                        break;
+                    case "webp":
+                        encodedFormat = SKEncodedImageFormat.Webp;
+                        encoderQuality = configuration.Options.FormatQuality["webp"];
+                        contentType = "image/webp";
+                        break;
+                    default:
+                        return Results.BadRequest("Invalid format");
                 }
+
+                image.Encode(stream, encodedFormat, encoderQuality);
+
+                return Results.Bytes(stream.ToArray(), contentType);
             };
 
             applicationBuilder.UseRewriter(new RewriteOptions().AddRewrite(
@@ -847,197 +845,194 @@ namespace TileServerGL
 
                                 if ((paths?.Any() ?? false) || (markers?.Any() ?? false))
                                 {
-                                    using (var canvas = new SKCanvas(image))
+                                    using var canvas = new SKCanvas(image);
+
+                                    if (paths?.Any() ?? false)
                                     {
-                                        if (paths?.Any() ?? false)
+                                        var globalFill = new SKColor(255, 255, 255, 102);
+
+                                        if (SKColor.TryParse(fill, out SKColor globalFillValue))
                                         {
-                                            var globalFill = new SKColor(255, 255, 255, 102);
+                                            globalFill = globalFillValue;
+                                        }
 
-                                            if (SKColor.TryParse(fill, out SKColor globalFillValue))
+                                        var globalStroke = new SKColor(0, 64, 255, 178);
+
+                                        if (SKColor.TryParse(stroke, out SKColor globalStrokeValue))
+                                        {
+                                            globalStroke = globalStrokeValue;
+                                        }
+
+                                        var globalBorder = SKColors.Transparent;
+
+                                        if (SKColor.TryParse(border, out SKColor globalBorderValue))
+                                        {
+                                            globalBorder = globalBorderValue;
+                                        }
+
+                                        var globalStrokeCap = SKStrokeCap.Butt;
+
+                                        if (Enum.TryParse(linecap, true, out SKStrokeCap globalStrokeCapValue) && Enum.IsDefined(globalStrokeCapValue))
+                                        {
+                                            globalStrokeCap = globalStrokeCapValue;
+                                        }
+
+                                        var globalStrokeJoin = SKStrokeJoin.Miter;
+
+                                        if (Enum.TryParse(linejoin, true, out SKStrokeJoin globalStrokeJoinValue) && Enum.IsDefined(globalStrokeJoinValue))
+                                        {
+                                            globalStrokeJoin = globalStrokeJoinValue;
+                                        }
+
+                                        foreach (var path in paths)
+                                        {
+                                            using (var skPath = new SKPath())
                                             {
-                                                globalFill = globalFillValue;
-                                            }
+                                                var points = (double[])path["points"];
 
-                                            var globalStroke = new SKColor(0, 64, 255, 178);
+                                                skPath.MoveTo((float)points[0], (float)points[1]);
 
-                                            if (SKColor.TryParse(stroke, out SKColor globalStrokeValue))
-                                            {
-                                                globalStroke = globalStrokeValue;
-                                            }
-
-                                            var globalBorder = SKColors.Transparent;
-
-                                            if (SKColor.TryParse(border, out SKColor globalBorderValue))
-                                            {
-                                                globalBorder = globalBorderValue;
-                                            }
-
-                                            var globalStrokeCap = SKStrokeCap.Butt;
-
-                                            if (Enum.TryParse(linecap, true, out SKStrokeCap globalStrokeCapValue) && Enum.IsDefined(globalStrokeCapValue))
-                                            {
-                                                globalStrokeCap = globalStrokeCapValue;
-                                            }
-
-                                            var globalStrokeJoin = SKStrokeJoin.Miter;
-
-                                            if (Enum.TryParse(linejoin, true, out SKStrokeJoin globalStrokeJoinValue) && Enum.IsDefined(globalStrokeJoinValue))
-                                            {
-                                                globalStrokeJoin = globalStrokeJoinValue;
-                                            }
-
-                                            foreach (var path in paths)
-                                            {
-                                                using (var skPath = new SKPath())
+                                                for (int i = 2; i < points.Length; i += 2)
                                                 {
-                                                    var points = (double[])path["points"];
+                                                    skPath.LineTo((float)points[i], (float)points[i + 1]);
+                                                }
 
-                                                    skPath.MoveTo((float)points[0], (float)points[1]);
+                                                if (points[0] == points[points.Length - 2] && points[1] == points[points.Length - 1])
+                                                {
+                                                    skPath.Close();
+                                                }
 
-                                                    for (int i = 2; i < points.Length; i += 2)
+                                                var skPaint = new SKPaint() { IsAntialias = true };
+
+                                                if (!string.IsNullOrWhiteSpace(fill) || path.ContainsKey("fill"))
+                                                {
+                                                    var pathFill = globalFill;
+
+                                                    if (SKColor.TryParse(path!.GetValueOrDefault("fill")?.ToString(), out SKColor pathFillValue))
                                                     {
-                                                        skPath.LineTo((float)points[i], (float)points[i + 1]);
+                                                        pathFill = pathFillValue;
                                                     }
 
-                                                    if (points[0] == points[points.Length - 2] && points[1] == points[points.Length - 1])
+                                                    skPaint.IsStroke = false;
+                                                    skPaint.Color = pathFill;
+
+                                                    canvas.DrawPath(skPath, skPaint);
+                                                }
+
+                                                var pathStrokeWidth = strokeWidth ?? 0;
+                                                double.TryParse(path.GetValueOrDefault("width")?.ToString(), out pathStrokeWidth);
+
+                                                if (pathStrokeWidth <= 0 && string.IsNullOrWhiteSpace(fill) && !path.ContainsKey("fill"))
+                                                {
+                                                    pathStrokeWidth = 1;
+                                                }
+
+                                                if (pathStrokeWidth > 0)
+                                                {
+                                                    skPaint.IsStroke = true;
+
+                                                    var pathStrokeCap = globalStrokeCap;
+
+                                                    if (Enum.TryParse(path.GetValueOrDefault("linecap")?.ToString(), true, out SKStrokeCap pathStrokeCapValue) && Enum.IsDefined(pathStrokeCapValue))
                                                     {
-                                                        skPath.Close();
+                                                        pathStrokeCap = pathStrokeCapValue;
                                                     }
 
-                                                    var skPaint = new SKPaint() { IsAntialias = true };
+                                                    skPaint.StrokeCap = pathStrokeCap;
 
-                                                    if (!string.IsNullOrWhiteSpace(fill) || path.ContainsKey("fill"))
+                                                    var pathStrokeJoin = globalStrokeJoin;
+
+                                                    if (Enum.TryParse(path.GetValueOrDefault("linecap")?.ToString(), true, out SKStrokeJoin pathStrokeJoinValue) && Enum.IsDefined(pathStrokeJoinValue))
                                                     {
-                                                        var pathFill = globalFill;
+                                                        pathStrokeJoin = pathStrokeJoinValue;
+                                                    }
 
-                                                        if (SKColor.TryParse(path!.GetValueOrDefault("fill")?.ToString(), out SKColor pathFillValue))
+                                                    skPaint.StrokeJoin = pathStrokeJoin;
+
+                                                    var pathBorderWidth = borderWidth ?? pathStrokeWidth * 0.1;
+                                                    double.TryParse(path.GetValueOrDefault("borderWidth")?.ToString(), out pathBorderWidth);
+
+                                                    if (pathBorderWidth > 0 && !string.IsNullOrWhiteSpace(border) || path.ContainsKey("border"))
+                                                    {
+                                                        var pathBorder = globalBorder;
+
+                                                        if (SKColor.TryParse(path.GetValueOrDefault("border")?.ToString(), out SKColor pathBorderValue))
                                                         {
-                                                            pathFill = pathFillValue;
+                                                            pathBorder = pathBorderValue;
                                                         }
 
-                                                        skPaint.IsStroke = false;
-                                                        skPaint.Color = pathFill;
+                                                        skPaint.Color = pathBorder;
+                                                        skPaint.StrokeWidth = (float)(pathStrokeWidth + pathBorderWidth * 2);
 
                                                         canvas.DrawPath(skPath, skPaint);
                                                     }
 
-                                                    var pathStrokeWidth = strokeWidth ?? 0;
-                                                    double.TryParse(path.GetValueOrDefault("width")?.ToString(), out pathStrokeWidth);
+                                                    var pathStroke = globalStroke;
 
-                                                    if (pathStrokeWidth <= 0 && string.IsNullOrWhiteSpace(fill) && !path.ContainsKey("fill"))
+                                                    if (SKColor.TryParse(path.GetValueOrDefault("stroke")?.ToString(), out SKColor pathStrokeValue))
                                                     {
-                                                        pathStrokeWidth = 1;
+                                                        pathStroke = pathStrokeValue;
                                                     }
 
-                                                    if (pathStrokeWidth > 0)
-                                                    {
-                                                        skPaint.IsStroke = true;
+                                                    skPaint.Color = pathStroke;
+                                                    skPaint.StrokeWidth = (float)pathStrokeWidth;
 
-                                                        var pathStrokeCap = globalStrokeCap;
-
-                                                        if (Enum.TryParse(path.GetValueOrDefault("linecap")?.ToString(), true, out SKStrokeCap pathStrokeCapValue) && Enum.IsDefined(pathStrokeCapValue))
-                                                        {
-                                                            pathStrokeCap = pathStrokeCapValue;
-                                                        }
-
-                                                        skPaint.StrokeCap = pathStrokeCap;
-
-                                                        var pathStrokeJoin = globalStrokeJoin;
-
-                                                        if (Enum.TryParse(path.GetValueOrDefault("linecap")?.ToString(), true, out SKStrokeJoin pathStrokeJoinValue) && Enum.IsDefined(pathStrokeJoinValue))
-                                                        {
-                                                            pathStrokeJoin = pathStrokeJoinValue;
-                                                        }
-
-                                                        skPaint.StrokeJoin = pathStrokeJoin;
-
-                                                        var pathBorderWidth = borderWidth ?? pathStrokeWidth * 0.1;
-                                                        double.TryParse(path.GetValueOrDefault("borderWidth")?.ToString(), out pathBorderWidth);
-
-                                                        if (pathBorderWidth > 0 && !string.IsNullOrWhiteSpace(border) || path.ContainsKey("border"))
-                                                        {
-                                                            var pathBorder = globalBorder;
-
-                                                            if (SKColor.TryParse(path.GetValueOrDefault("border")?.ToString(), out SKColor pathBorderValue))
-                                                            {
-                                                                pathBorder = pathBorderValue;
-                                                            }
-
-                                                            skPaint.Color = pathBorder;
-                                                            skPaint.StrokeWidth = (float)(pathStrokeWidth + pathBorderWidth * 2);
-
-                                                            canvas.DrawPath(skPath, skPaint);
-                                                        }
-
-                                                        var pathStroke = globalStroke;
-
-                                                        if (SKColor.TryParse(path.GetValueOrDefault("stroke")?.ToString(), out SKColor pathStrokeValue))
-                                                        {
-                                                            pathStroke = pathStrokeValue;
-                                                        }
-
-                                                        skPaint.Color = pathStroke;
-                                                        skPaint.StrokeWidth = (float)pathStrokeWidth;
-
-                                                        canvas.DrawPath(skPath, skPaint);
-                                                    }
+                                                    canvas.DrawPath(skPath, skPaint);
                                                 }
                                             }
                                         }
-
-                                        if (markers?.Any() ?? false)
-                                        {
-                                            var paint = new SKPaint() { IsAntialias = true, FilterQuality = SKFilterQuality.High };
-
-                                            foreach (var marker in markers)
-                                            {
-                                                var point = ((double[])marker["point"]).Chunk(2).Select(c => new SKPoint((float)c[0], (float)c[1])).First();
-                                                var iconPath = (string)marker["iconPath"];
-
-
-                                                SKBitmap? markerIcon = null;
-
-                                                try
-                                                {
-                                                    if (Util.HttpRegex.IsMatch(iconPath))
-                                                    {
-                                                        using (var client = new HttpClient())
-                                                        {
-                                                            markerIcon = SKBitmap.Decode(client.GetByteArrayAsync(iconPath).Result);
-                                                        }
-                                                    }
-                                                    else
-                                                    {
-                                                        markerIcon = SKBitmap.Decode(Path.Combine(configuration.Options.Paths!.Icons, iconPath));
-                                                    }
-                                                }
-                                                finally
-                                                {
-
-                                                }
-
-                                                if (markerIcon == null)
-                                                {
-                                                    continue;
-                                                }
-
-                                                var markerScale = (float)(double)marker.GetValueOrDefault("scale", 1.0);
-                                                var markerOffset = ((int[])marker.GetValueOrDefault("offset", new[] { 0, 0 })).Chunk(2).Select(c => new SKPoint(c[0], c[1])).First();
-
-                                                point += new SKPoint((-markerIcon.Width / 2 + markerOffset.X) * markerScale, (-markerIcon.Height + markerOffset.Y) * markerScale);
-
-                                                var destRect = new SKRect()
-                                                {
-                                                    Location = point,
-                                                    Size = new SKSize(markerIcon.Width * markerScale, markerIcon.Height * markerScale)
-                                                };
-
-                                                canvas.DrawBitmap(markerIcon, destRect, paint);
-                                            }
-                                        }
-
-                                        canvas.Flush();
                                     }
+
+                                    if (markers?.Any() ?? false)
+                                    {
+                                        var paint = new SKPaint() { IsAntialias = true, FilterQuality = SKFilterQuality.High };
+
+                                        foreach (var marker in markers)
+                                        {
+                                            var point = ((double[])marker["point"]).Chunk(2).Select(c => new SKPoint((float)c[0], (float)c[1])).First();
+                                            var iconPath = (string)marker["iconPath"];
+
+
+                                            SKBitmap? markerIcon = null;
+
+                                            try
+                                            {
+                                                if (Util.HttpRegex.IsMatch(iconPath))
+                                                {
+                                                    using var client = new HttpClient();
+                                                    markerIcon = SKBitmap.Decode(client.GetByteArrayAsync(iconPath).Result);
+                                                }
+                                                else
+                                                {
+                                                    markerIcon = SKBitmap.Decode(Path.Combine(configuration.Options.Paths!.Icons, iconPath));
+                                                }
+                                            }
+                                            finally
+                                            {
+
+                                            }
+
+                                            if (markerIcon == null)
+                                            {
+                                                continue;
+                                            }
+
+                                            var markerScale = (float)(double)marker.GetValueOrDefault("scale", 1.0);
+                                            var markerOffset = ((int[])marker.GetValueOrDefault("offset", new[] { 0, 0 })).Chunk(2).Select(c => new SKPoint(c[0], c[1])).First();
+
+                                            point += new SKPoint((-markerIcon.Width / 2 + markerOffset.X) * markerScale, (-markerIcon.Height + markerOffset.Y) * markerScale);
+
+                                            var destRect = new SKRect()
+                                            {
+                                                Location = point,
+                                                Size = new SKSize(markerIcon.Width * markerScale, markerIcon.Height * markerScale)
+                                            };
+
+                                            canvas.DrawBitmap(markerIcon, destRect, paint);
+                                        }
+                                    }
+
+                                    canvas.Flush();
                                 }
 
                                 return respondImage(format, image);

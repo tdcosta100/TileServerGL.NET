@@ -22,9 +22,9 @@ namespace TileServerGL
 
             #region Properties
             public ConfigurationOptionsPaths? Paths { get; set; }
-            public string[] Domains { get; set; } = new string[0];
+            public string[] Domains { get; set; } = Array.Empty<string>();
             public object FrontPage { get; set; } = true;
-            public Dictionary<string, int> FormatQuality { get; set; } = new Dictionary<string, int>() { { "png", 100 }, { "jpeg", 100 }, { "webp", 100 } };
+            public Dictionary<string, int> FormatQuality { get; set; } = new() { { "png", 100 }, { "jpeg", 100 }, { "webp", 100 } };
             public int MaxScaleFactor { get; set; } = 3;
             public int MaxSize { get; set; } = 2048;
             public int TileSize { get; set; } = 256;
@@ -60,8 +60,8 @@ namespace TileServerGL
 
         #region Properties
         public ConfigurationOptions? Options { get; set; }
-        public Dictionary<string, ConfigurationStyle> Styles { get; set; } = new Dictionary<string, ConfigurationStyle>();
-        public Dictionary<string, ConfigurationData> Data { get; set; } = new Dictionary<string, ConfigurationData>();
+        public Dictionary<string, ConfigurationStyle> Styles { get; set; } = new();
+        public Dictionary<string, ConfigurationData> Data { get; set; } = new();
         #endregion
     }
 }

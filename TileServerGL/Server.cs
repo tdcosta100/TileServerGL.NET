@@ -37,89 +37,92 @@ namespace TileServerGL
 
             var sourceFromDataRegex = new Regex(@"^mbtiles://\{(?<source>[^\}]+)\}$");
 
-            foreach (var styleEntry in configuration.Styles.ToArray())
+            using (var client = new HttpClient())
             {
-                try
+                foreach (var styleEntry in configuration.Styles.ToArray())
                 {
-                    styleEntry.Value.StyleJSON = JsonNode.Parse(
-                        !Util.HttpRegex.IsMatch(styleEntry.Value.Style)
-                        ?
-                        File.ReadAllText(Path.IsPathFullyQualified(styleEntry.Value.Style) ? styleEntry.Value.Style : Path.Combine(configuration.Options.Paths.Styles!, styleEntry.Value.Style))
-                        :
-                        new HttpClient().GetStringAsync(styleEntry.Value.Style).Result
-                    );
-
-                    var tileJSON = new JsonObject()
+                    try
                     {
-                        ["tilejson"] = "2.0.0",
-                        ["name"] = styleEntry.Value.StyleJSON!["name"].Deserialize<JsonNode>(),
-                        ["attribution"] = "",
-                        ["minzoom"] = 0,
-                        ["maxzoom"] = 20,
-                        ["bounds"] = new JsonArray(-180, -85.0511, 180, 85.0511),
-                        ["format"] = "png",
-                        ["type"] = "baselayer"
-                    };
-
-                    if (styleEntry.Value.TileJSON == null)
-                    {
-                        styleEntry.Value.TileJSON = new JsonObject();
-                    }
-
-                    foreach (var property in tileJSON)
-                    {
-                        if (styleEntry.Value.TileJSON[property.Key] == null)
-                        {
-                            styleEntry.Value.TileJSON[property.Key] = property.Value.Deserialize<JsonNode>();
-                        }
-                    }
-
-                    if (styleEntry.Value.StyleJSON["center"] != null && styleEntry.Value.StyleJSON["zoom"] != null)
-                    {
-                        styleEntry.Value.TileJSON["center"] = new JsonArray(
-                            styleEntry.Value.StyleJSON["center"]![0]!.GetValue<double>(),
-                            styleEntry.Value.StyleJSON["center"]![1]!.GetValue<double>(),
-                            styleEntry.Value.StyleJSON["zoom"]!.GetValue<double>()
+                        styleEntry.Value.StyleJSON = JsonNode.Parse(
+                            !Util.HttpRegex.IsMatch(styleEntry.Value.Style)
+                            ?
+                            File.ReadAllText(Path.IsPathFullyQualified(styleEntry.Value.Style) ? styleEntry.Value.Style : Path.Combine(configuration.Options.Paths.Styles!, styleEntry.Value.Style))
+                            :
+                            client.GetStringAsync(styleEntry.Value.Style).Result
                         );
-                    }
 
-                    Util.FixTileJSONCenter(styleEntry.Value.TileJSON);
-
-                    if (styleEntry.Value.StyleJSON["sources"] != null)
-                    {
-                        foreach (var source in styleEntry.Value.StyleJSON["sources"]!.AsObject())
+                        var tileJSON = new JsonObject()
                         {
-                            if (source.Value!["url"] != null)
+                            ["tilejson"] = "2.0.0",
+                            ["name"] = styleEntry.Value.StyleJSON!["name"].Deserialize<JsonNode>(),
+                            ["attribution"] = "",
+                            ["minzoom"] = 0,
+                            ["maxzoom"] = 20,
+                            ["bounds"] = new JsonArray(-180, -85.0511, 180, 85.0511),
+                            ["format"] = "png",
+                            ["type"] = "baselayer"
+                        };
+
+                        if (styleEntry.Value.TileJSON == null)
+                        {
+                            styleEntry.Value.TileJSON = new JsonObject();
+                        }
+
+                        foreach (var property in tileJSON)
+                        {
+                            if (styleEntry.Value.TileJSON[property.Key] == null)
                             {
-                                var url = source.Value["url"]!.GetValue<string>();
+                                styleEntry.Value.TileJSON[property.Key] = property.Value.Deserialize<JsonNode>();
+                            }
+                        }
 
-                                var match = sourceFromDataRegex.Match(url);
+                        if (styleEntry.Value.StyleJSON["center"] != null && styleEntry.Value.StyleJSON["zoom"] != null)
+                        {
+                            styleEntry.Value.TileJSON["center"] = new JsonArray(
+                                styleEntry.Value.StyleJSON["center"]![0]!.GetValue<double>(),
+                                styleEntry.Value.StyleJSON["center"]![1]!.GetValue<double>(),
+                                styleEntry.Value.StyleJSON["zoom"]!.GetValue<double>()
+                            );
+                        }
 
-                                if (match.Success)
+                        Util.FixTileJSONCenter(styleEntry.Value.TileJSON);
+
+                        if (styleEntry.Value.StyleJSON["sources"] != null)
+                        {
+                            foreach (var source in styleEntry.Value.StyleJSON["sources"]!.AsObject())
+                            {
+                                if (source.Value!["url"] != null)
                                 {
-                                    source.Value["url"] = match.Result("local://data/${source}.json");
+                                    var url = source.Value["url"]!.GetValue<string>();
+
+                                    var match = sourceFromDataRegex.Match(url);
+
+                                    if (match.Success)
+                                    {
+                                        source.Value["url"] = match.Result("local://data/${source}.json");
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (styleEntry.Value.StyleJSON["sprite"] != null && !Util.HttpRegex.IsMatch(styleEntry.Value.StyleJSON["sprite"]!.GetValue<string>()))
+                        if (styleEntry.Value.StyleJSON["sprite"] != null && !Util.HttpRegex.IsMatch(styleEntry.Value.StyleJSON["sprite"]!.GetValue<string>()))
+                        {
+                            styleEntry.Value.SpritePath = styleEntry.Value.StyleJSON["sprite"]!.GetValue<string>()
+                                .Replace("{style}", Path.GetFileNameWithoutExtension(styleEntry.Value.Style))
+                                .Replace("{styleJsonFolder}", Path.GetRelativePath(configuration.Options.Paths.Sprites, Path.GetDirectoryName(Path.Combine(configuration.Options.Paths.Styles!, styleEntry.Value.Style))!));
+
+                            styleEntry.Value.StyleJSON["sprite"] = $"local://styles/{styleEntry.Key}/sprite";
+                        }
+
+                        if (styleEntry.Value.StyleJSON["glyphs"] != null && !Util.HttpRegex.IsMatch(styleEntry.Value.StyleJSON["glyphs"]!.GetValue<string>()))
+                        {
+                            styleEntry.Value.StyleJSON["glyphs"] = "local://fonts/{fontstack}/{range}.pbf";
+                        }
+                    }
+                    catch
                     {
-                        styleEntry.Value.SpritePath = styleEntry.Value.StyleJSON["sprite"]!.GetValue<string>()
-                            .Replace("{style}", Path.GetFileNameWithoutExtension(styleEntry.Value.Style))
-                            .Replace("{styleJsonFolder}", Path.GetRelativePath(configuration.Options.Paths.Sprites, Path.GetDirectoryName(Path.Combine(configuration.Options.Paths.Styles!, styleEntry.Value.Style))!));
-
-                        styleEntry.Value.StyleJSON["sprite"] = $"local://styles/{styleEntry.Key}/sprite";
+                        configuration.Styles.Remove(styleEntry.Key);
                     }
-
-                    if (styleEntry.Value.StyleJSON["glyphs"] != null && !Util.HttpRegex.IsMatch(styleEntry.Value.StyleJSON["glyphs"]!.GetValue<string>()))
-                    {
-                        styleEntry.Value.StyleJSON["glyphs"] = "local://fonts/{fontstack}/{range}.pbf";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    configuration.Styles.Remove(styleEntry.Key);
                 }
             }
 
@@ -160,7 +163,7 @@ namespace TileServerGL
 
                         Util.FixTileJSONCenter(dataEntry.Value.TileJSON);
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         configuration.Data.Remove(dataEntry.Key);
                     }

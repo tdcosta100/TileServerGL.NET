@@ -88,44 +88,41 @@ namespace TileServerGL
                 {
                     if (responseData!.Take(Util.GZipSignature.Length).SequenceEqual(Util.GZipSignature))
                     {
-                        using (var memoryStreamIn = new MemoryStream(responseData!))
-                        using (var memoryStreamOut = new MemoryStream())
-                        using (var gzipStream = new GZipStream(memoryStreamOut, CompressionMode.Decompress))
-                        {
-                            memoryStreamIn.CopyTo(gzipStream);
-                            gzipStream.Flush();
-                            responseData = memoryStreamOut.ToArray();
-                        }
+                        using var memoryStreamIn = new MemoryStream(responseData!);
+                        using var memoryStreamOut = new MemoryStream();
+                        using var gzipStream = new GZipStream(memoryStreamOut, CompressionMode.Decompress);
+
+                        memoryStreamIn.CopyTo(gzipStream);
+                        gzipStream.Flush();
+                        responseData = memoryStreamOut.ToArray();
                     }
 
-                    using (var memoryStream = new MemoryStream(responseData!))
+                    using var memoryStream = new MemoryStream(responseData!);
+                    var layers = VectorTileParser.Parse(memoryStream);
+
+                    var geoJSON = new JsonObject()
                     {
-                        var layers = VectorTileParser.Parse(memoryStream);
+                        ["type"] = "FeatureCollection",
+                    };
 
-                        var geoJSON = new JsonObject()
-                        {
-                            ["type"] = "FeatureCollection",
-                        };
+                    var features = new List<JsonNode?>();
 
-                        var features = new List<JsonNode?>();
+                    foreach (var layer in layers)
+                    {
+                        features.AddRange(
+                            layer.ToGeoJSON(x, y, z).Features
+                            .Select(feature =>
+                            {
+                                feature.Properties.Add("layer", layer.Name);
 
-                        foreach (var layer in layers)
-                        {
-                            features.AddRange(
-                                layer.ToGeoJSON(x, y, z).Features
-                                .Select(feature =>
-                                {
-                                    feature.Properties.Add("layer", layer.Name);
-
-                                    return JsonSerializer.SerializeToNode(feature, new JsonSerializerOptions() { PropertyNamingPolicy = lowerCaseNamingPolicy });
-                                })
-                            );
-                        }
-
-                        geoJSON["features"] = new JsonArray(features.ToArray());
-
-                        responseData = Encoding.UTF8.GetBytes(geoJSON.ToJsonString());
+                                return JsonSerializer.SerializeToNode(feature, new JsonSerializerOptions() { PropertyNamingPolicy = lowerCaseNamingPolicy });
+                            })
+                        );
                     }
+
+                    geoJSON["features"] = new JsonArray(features.ToArray());
+
+                    responseData = Encoding.UTF8.GetBytes(geoJSON.ToJsonString());
                 }
 
                 if ((format == "pbf" || format == "geojson") && !responseData!.Take(Util.GZipSignature.Length).SequenceEqual(Util.GZipSignature))

@@ -14,7 +14,7 @@ namespace TileServerGL
 
         public const double DegreesToRadians = Math.PI / 180.0;
 
-        public static Regex HttpRegex = new Regex("^(https?:)?//");
+        public static Regex HttpRegex = new("^(https?:)?//");
 
         public static byte[] GZipSignature = new[] { (byte)0x1f, (byte)0x8b };
         #endregion
