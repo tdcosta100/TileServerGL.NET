@@ -7,8 +7,6 @@ using Microsoft.Extensions.Primitives;
 using SkiaSharp;
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.IO;
-using System.Net;
 using System.Net.Mime;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -113,9 +111,10 @@ namespace TileServerGL
         }
     }
 
-    public class RendererPool
+    public class RendererPool : IDisposable
     {
         #region Private fields
+        private bool _Disposed = false;
         private readonly object _Lock = new();
         private readonly int _MinRenderers;
         private readonly int _MaxRenderers;
@@ -188,8 +187,37 @@ namespace TileServerGL
         {
             lock (_Lock)
             {
-                _IdleRenderers.Add(renderer);
-                _RemoveRendererTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+                if (_Disposed)
+                {
+                    renderer.Dispose();
+                    _TotalRenderers--;
+                }
+                else
+                {
+                    _IdleRenderers.Add(renderer);
+                    _RemoveRendererTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_Disposed)
+            {
+                _Disposed = true;
+
+                lock (_Lock)
+                {
+                    _RemoveRendererTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+                    while (_IdleRenderers.Any())
+                    {
+                        var renderer = _IdleRenderers.Take();
+                        renderer.Dispose();
+
+                        _TotalRenderers--;
+                    }
+                }
             }
         }
         #endregion
@@ -197,7 +225,7 @@ namespace TileServerGL
 
     public class ServeRendered
     {
-        public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
+        public static void Init(Configuration configuration, ILogger logger, IHostApplicationLifetime lifetime, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
             var tileRendererPools = new Dictionary<string, Dictionary<int, RendererPool>>();
             var staticRendererPools = new Dictionary<string, Dictionary<int, RendererPool>>();
@@ -278,6 +306,14 @@ namespace TileServerGL
                             )
                         )
                 );
+
+                lifetime.ApplicationStopping.Register(() =>
+                {
+                    foreach (var rendererPool in tileRendererPools.Values.SelectMany(g => g.Values).ToArray())
+                    {
+                        rendererPool.Dispose();
+                    }
+                });
 
                 if (configuration.Options.ServeStaticMaps)
                 {
@@ -366,49 +402,52 @@ namespace TileServerGL
 
                     var internalZoom = z + Math.Log2((double)Util.TileSize / Util.InternalTileSize);
 
-                    var renderer = tileRendererPools[id][scale].Acquire();
-
                     PremultipliedImage? rawImage = null;
 
-                    try
+                    await Task.Run(async () =>
                     {
-                        await renderer.InvokeAsync(elements =>
+                        var renderer = tileRendererPools[id][scale].Acquire();
+
+                        try
                         {
-                            Exception? ex = null;
+                            await renderer.InvokeAsync(elements =>
+                            {
+                                Exception? ex = null;
 
-                            elements.Map.RenderStill(
-                                camera: elements.Map.CameraForLatLngBounds(new LatLngBounds(new CanonicalTileID(z, (uint)x, (uint)y)), new EdgeInsets(internalTileMargin, internalTileMargin, internalTileMargin, internalTileMargin)).WithZoom(internalZoom),
-                                debugOptions: MapDebugOptions.NoDebug,
-                                callback: exception =>
-                                {
-                                    try
+                                elements.Map.RenderStill(
+                                    camera: elements.Map.CameraForLatLngBounds(new LatLngBounds(new CanonicalTileID(z, (uint)x, (uint)y)), new EdgeInsets(internalTileMargin, internalTileMargin, internalTileMargin, internalTileMargin)).WithZoom(internalZoom),
+                                    debugOptions: MapDebugOptions.NoDebug,
+                                    callback: exception =>
                                     {
-                                        ex = exception;
-
-                                        if (ex == null)
+                                        try
                                         {
-                                            rawImage = elements.FrontEnd.ReadStillImage();
+                                            ex = exception;
+
+                                            if (ex == null)
+                                            {
+                                                rawImage = elements.FrontEnd.ReadStillImage();
+                                            }
+                                        }
+                                        finally
+                                        {
+                                            elements.RunLoop.Stop();
                                         }
                                     }
-                                    finally
-                                    {
-                                        elements.RunLoop.Stop();
-                                    }
+                                );
+
+                                elements.RunLoop.Run();
+
+                                if (ex != null)
+                                {
+                                    throw ex;
                                 }
-                            );
-
-                            elements.RunLoop.Run();
-
-                            if (ex != null)
-                            {
-                                throw ex;
-                            }
-                        });
-                    }
-                    finally
-                    {
-                        tileRendererPools[id][scale].Release(renderer);
-                    }
+                            });
+                        }
+                        finally
+                        {
+                            tileRendererPools[id][scale].Release(renderer);
+                        }
+                    });
 
                     if (rawImage != null)
                     {

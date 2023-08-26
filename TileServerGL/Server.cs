@@ -5,13 +5,12 @@ using System.Net.Mime;
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Hosting.Server;
 
 namespace TileServerGL
 {
     public class Server
     {
-        public static async Task Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, IWebHostEnvironment webHostEnvironment)
+        public static async Task Init(Configuration configuration, ILogger logger, IHostApplicationLifetime lifetime, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, IWebHostEnvironment webHostEnvironment)
         {
             var handlebars = Handlebars.Create();
 
@@ -224,10 +223,10 @@ namespace TileServerGL
                 });
             };
 
-            ServeStyle.Init(configuration, applicationBuilder, endpointRouteBuilder.MapGroup("/styles"), "/styles");
-            ServeRendered.Init(configuration, applicationBuilder, endpointRouteBuilder.MapGroup("/styles"), "/styles");
-            ServeData.Init(configuration, applicationBuilder, endpointRouteBuilder.MapGroup("/data"), "/data");
-            ServeFont.Init(configuration, applicationBuilder, endpointRouteBuilder.MapGroup("/fonts"), "/fonts");
+            ServeStyle.Init(configuration, logger, lifetime, applicationBuilder, endpointRouteBuilder.MapGroup("/styles"), "/styles");
+            ServeRendered.Init(configuration, logger, lifetime, applicationBuilder, endpointRouteBuilder.MapGroup("/styles"), "/styles");
+            ServeData.Init(configuration, logger, lifetime, applicationBuilder, endpointRouteBuilder.MapGroup("/data"), "/data");
+            ServeFont.Init(configuration, logger, lifetime, applicationBuilder, endpointRouteBuilder.MapGroup("/fonts"), "/fonts");
 
             serveTemplate("/", "index", request =>
             {

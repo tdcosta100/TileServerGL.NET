@@ -1,16 +1,5 @@
-using HandlebarsDotNet;
-using MaplibreNative;
-using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.FileSystemGlobbing.Internal.PatternContexts;
-using Microsoft.Extensions.Primitives;
-using System.Net;
-using System.Net.Mime;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 
 namespace TileServerGL
 {
@@ -109,7 +98,7 @@ namespace TileServerGL
 
             Util.TileSize = configuration.Options!.TileSize;
 
-            await Server.Init(configuration, app, app, builder.Environment);
+            await Server.Init(configuration, app.Logger, app.Lifetime, app, app, builder.Environment);
 
             if (builder.Configuration.GetValue<bool?>("UseOutputCache") ?? false)
             {

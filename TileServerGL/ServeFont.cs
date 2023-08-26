@@ -2,7 +2,7 @@
 {
     public class ServeFont
     {
-        public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
+        public static void Init(Configuration configuration, ILogger logger, IHostApplicationLifetime lifetime, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
             endpointRouteBuilder.MapGet(@"/{fontstack:regex(^[A-Za-z0-9_\- ]+$)}/{range:regex(^\d+-\d+)}.pbf", (HttpContext context, string fontstack, string range) =>
             {

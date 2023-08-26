@@ -1,8 +1,5 @@
-﻿using MaplibreNative;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Rewrite;
+﻿using Microsoft.AspNetCore.Rewrite;
 using System.Net.Mime;
-using System.Reflection.Metadata.Ecma335;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -10,7 +7,7 @@ namespace TileServerGL
 {
     public class ServeStyle
     {
-        public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
+        public static void Init(Configuration configuration, ILogger logger, IHostApplicationLifetime lifetime, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
             endpointRouteBuilder.MapGet(@"/{id:regex(^[A-Za-z0-9_\-]+$)}/style.json", (HttpContext context, string? id) =>
             {

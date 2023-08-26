@@ -11,6 +11,7 @@ namespace TileServerGL
 {
     public class FileProvider : IDisposable
     {
+        private ILogger _Logger;
         private Thread _FileProviderThread;
         private bool _Disposed = false;
         private RunLoop? _RunLoop = null;
@@ -18,8 +19,12 @@ namespace TileServerGL
         private BlockingCollection<Action<(RunLoop RunLoop, FileSource FileSource)>> _FileRequestQueue = new();
         private CancellationTokenSource _CancellationTokenSource = new();
 
-        public FileProvider(Func<(RunLoop RunLoop, FileSource FileSource)> initializer)
+        public string? Name => _FileProviderThread.Name;
+
+        public FileProvider(ILogger logger, Func<(RunLoop RunLoop, FileSource FileSource)> initializer)
         {
+            _Logger = logger;
+
             _FileProviderThread = new Thread(() =>
             {
                 Thread.CurrentThread.Name = $"FileProvider {Environment.CurrentManagedThreadId}";
@@ -104,9 +109,12 @@ namespace TileServerGL
         }
     }
 
-    public class FileProviderPool
+    public class FileProviderPool : IDisposable
     {
         #region Private fields
+        private string? _Name;
+        private ILogger _Logger;
+        private bool _Disposed = false;
         private readonly object _Lock = new();
         private readonly int _MinFileProviders;
         private readonly int _MaxFileProviders;
@@ -116,9 +124,15 @@ namespace TileServerGL
         private readonly Timer _RemoveFileProviderTimer;
         #endregion
 
+        #region Properties
+        public string? Name => _Name;
+        #endregion
+
         #region Constructor
-        public FileProviderPool(int minFileProviders, int maxFileProviders, Func<(RunLoop RunLoop, FileSource FileSource)> fileProviderInitializer)
+        public FileProviderPool(ILogger logger, string? name, int minFileProviders, int maxFileProviders, Func<(RunLoop RunLoop, FileSource FileSource)> fileProviderInitializer)
         {
+            _Logger = logger;
+            _Name = name;
             _MinFileProviders = minFileProviders;
             _MaxFileProviders = maxFileProviders;
             _FileProviderInitializer = fileProviderInitializer;
@@ -130,7 +144,7 @@ namespace TileServerGL
             {
                 Task.WaitAll(
                     Enumerable.Range(0, _MinFileProviders)
-                    .Select(_ => Task.Run(() => _IdleFileProviders.Add(new FileProvider(_FileProviderInitializer))))
+                    .Select(_ => Task.Run(() => _IdleFileProviders.Add(new FileProvider(_Logger, _FileProviderInitializer))))
                     .ToArray()
                 );
 
@@ -168,7 +182,7 @@ namespace TileServerGL
                 if (!_IdleFileProviders.Any() && _TotalFileProviders < _MaxFileProviders)
                 {
                     _TotalFileProviders++;
-                    return new FileProvider(_FileProviderInitializer);
+                    return new FileProvider(_Logger, _FileProviderInitializer);
                 }
             }
 
@@ -179,10 +193,40 @@ namespace TileServerGL
         {
             lock (_Lock)
             {
-                _IdleFileProviders.Add(fileProvider);
-                _RemoveFileProviderTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+                if (_Disposed)
+                {
+                    fileProvider.Dispose();
+                    _TotalFileProviders--;
+                }
+                else
+                {
+                    _IdleFileProviders.Add(fileProvider);
+                    _RemoveFileProviderTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+                }
             }
         }
+
+        public void Dispose()
+        {
+            if (!_Disposed)
+            {
+                _Disposed = true;
+
+                lock (_Lock)
+                {
+                    _RemoveFileProviderTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+                    while (_IdleFileProviders.Any())
+                    {
+                        var renderer = _IdleFileProviders.Take();
+                        renderer.Dispose();
+
+                        _TotalFileProviders--;
+                    }
+                }
+            }
+        }
+
         #endregion
     }
 
@@ -193,7 +237,7 @@ namespace TileServerGL
             public override string ConvertName(string name) => name.ToLower();
         }
 
-        public static void Init(Configuration configuration, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
+        public static void Init(Configuration configuration, ILogger logger, IHostApplicationLifetime lifetime, IApplicationBuilder applicationBuilder, IEndpointRouteBuilder endpointRouteBuilder, string routePrefix)
         {
             var lowerCaseNamingPolicy = new LowerCaseNamingPolicy();
             var serveBounds = new[]
@@ -204,10 +248,18 @@ namespace TileServerGL
                 Math.Max(configuration.Options.ServeBounds[1], configuration.Options.ServeBounds[3])
             };
 
-            var fileProviderPools = configuration.Data.Keys.ToDictionary(
-                id => id,
-                id => new FileProviderPool(0, 1, () => (new RunLoop(), FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default())))
+            var fileProviderPools = configuration.Data.Where(data => !Util.HttpRegex.IsMatch(data.Value.MBTiles)).ToDictionary(
+                data => data.Key,
+                data => new FileProviderPool(logger, data.Key, 0, 16, () => (new RunLoop(), FileSourceManager.GetFileSource(FileSourceType.Mbtiles, ResourceOptions.Default())))
             );
+
+            lifetime.ApplicationStopping.Register(() =>
+            {
+                foreach (var fileProviderPool in fileProviderPools.Values.ToArray())
+                {
+                    fileProviderPool.Dispose();
+                }
+            });
 
             endpointRouteBuilder.MapGet(@"/{id:regex(^[A-Za-z0-9_\-]+$)}/{z:int:min(0)}/{x:int:min(0)}/{y:int:min(0)}.{format:regex(^\w+$)}", async (HttpContext context, string id, int x, int y, byte z, string format) =>
             {
