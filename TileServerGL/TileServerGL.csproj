@@ -28,10 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EditorConfigFiles Remove="C:\Users\tiagocost\source\repos\tiago-costa-cptm\TileServerGL.NET\TileServerGL\.editorconfig" />
+    <EditorConfigFiles Remove=".editorconfig" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="C:\Users\tiagocost\source\repos\tiago-costa-cptm\TileServerGL.NET\TileServerGL\.editorconfig" />
+    <None Include=".editorconfig" />
   </ItemGroup>
 </Project>
